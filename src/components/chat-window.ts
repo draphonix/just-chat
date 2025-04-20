@@ -1,10 +1,11 @@
 import { BaseComponent } from './base-component';
 import { StorageService, ChatMessage } from '../services/storage';
 import { WebhookService } from '../services/webhook';
+import { JWTService, JWTConfig } from '../services/jwt';
 
 export class ChatWindow extends BaseComponent {
   static get observedAttributes() {
-    return ['webhook-url', 'title', 'welcome-message', 'history-enabled', 'history-clear-button', 'position'];
+    return ['webhook-url', 'jwt-config', 'title', 'welcome-message', 'history-enabled', 'history-clear-button', 'position'];
   }
 
   private styles = `
@@ -168,17 +169,50 @@ export class ChatWindow extends BaseComponent {
   private isOpen = false;
   private storage: StorageService;
   private webhook: WebhookService;
+  private jwtService: JWTService | undefined;
   private sessionId: string;
   private hasShownWelcomeMessage = false;
 
   constructor() {
     super();
     const webhookUrl = this.getAttribute('webhook-url') || '';
+    
+    // Initialize JWT service if config is provided
+    let jwtConfig: JWTConfig | undefined;
+    const jwtConfigAttr = this.getAttribute('jwt-config');
+    if (jwtConfigAttr) {
+      try {
+        jwtConfig = JSON.parse(jwtConfigAttr);
+        if (jwtConfig && jwtConfig.issuer && jwtConfig.tokenEndpoint) {
+          this.jwtService = new JWTService(jwtConfig);
+          // Initialize token immediately
+          this.initializeToken();
+        } else {
+          console.error('Invalid JWT configuration: missing required fields');
+        }
+      } catch (e) {
+        console.error('Failed to initialize JWT service:', e);
+      }
+    }
+    
     this.storage = new StorageService(webhookUrl);
-    this.webhook = new WebhookService(webhookUrl);
+    this.webhook = new WebhookService(webhookUrl, this.jwtService);
     this.sessionId = crypto.randomUUID();
     this.addStyles(this.styles);
     this.render();
+  }
+
+  private async initializeToken() {
+    if (this.jwtService) {
+        try {
+            console.log('Initializing JWT token...');
+            await this.jwtService.getToken();
+            console.log('JWT token initialized successfully');
+        } catch (error) {
+            console.error('Failed to initialize JWT token:', error);
+            this.addSystemMessage('Failed to initialize chat. Please try again later.');
+        }
+    }
   }
 
   protected render(): void {
@@ -279,7 +313,7 @@ export class ChatWindow extends BaseComponent {
         context: {
           url: window.location.href
         },
-        history: this.storage.getMessages().slice(-10) // Send last 10 messages
+        history: this.storage.getMessages().slice(-10)
       });
 
       // Update message status
@@ -299,15 +333,39 @@ export class ChatWindow extends BaseComponent {
       this.renderMessage(responseMessage);
 
     } catch (error) {
-      if (error instanceof Error && error.message === 'Request cancelled') {
-        message.status = 'cancelled';
-        this.storage.updateMessage(messageId, { status: 'cancelled' });
-        this.updateMessageStatus(messageId, 'cancelled');
-      } else {
+      if (error instanceof Error) {
+        let errorMessage: string;
+        
+        switch (error.message) {
+          case 'Request cancelled':
+            message.status = 'cancelled';
+            this.storage.updateMessage(messageId, { status: 'cancelled' });
+            this.updateMessageStatus(messageId, 'cancelled');
+            return;
+            
+          case 'Authentication failed':
+            errorMessage = 'Authentication failed. Please try again later or contact support.';
+            // Try to refresh the token
+            if (this.jwtService) {
+              try {
+                await this.jwtService.refreshToken();
+                // Retry the message send after token refresh
+                this.sendMessage(text);
+                return;
+              } catch (refreshError) {
+                errorMessage = 'Unable to authenticate. Please contact support.';
+              }
+            }
+            break;
+            
+          default:
+            errorMessage = 'Failed to send message. Please try again.';
+        }
+        
         message.status = 'error';
         this.storage.updateMessage(messageId, { status: 'error' });
         this.updateMessageStatus(messageId, 'error');
-        this.addSystemMessage('Failed to send message. Please try again.');
+        this.addSystemMessage(errorMessage);
       }
     }
   }
@@ -407,12 +465,38 @@ export class ChatWindow extends BaseComponent {
     }
   }
 
+  private cleanup() {
+    if (this.jwtService) {
+      this.jwtService.destroy();
+    }
+    this.webhook.cancelRequest();
+  }
+
+  disconnectedCallback() {
+    this.cleanup();
+  }
+
   attributeChangedCallback(name: string, oldValue: string, newValue: string) {
     if (oldValue !== newValue) {
       if (name === 'webhook-url') {
         const webhookUrl = newValue || '';
         this.storage = new StorageService(webhookUrl);
-        this.webhook = new WebhookService(webhookUrl);
+        this.webhook = new WebhookService(webhookUrl, this.jwtService);
+      } else if (name === 'jwt-config') {
+        try {
+          const jwtConfig = JSON.parse(newValue);
+          if (jwtConfig && jwtConfig.issuer && jwtConfig.tokenEndpoint) {
+            this.jwtService = new JWTService(jwtConfig);
+            // Initialize token immediately
+            this.initializeToken();
+          } else {
+            console.error('Invalid JWT configuration: missing required fields');
+          }
+          const webhookUrl = this.getAttribute('webhook-url') || '';
+          this.webhook = new WebhookService(webhookUrl, this.jwtService);
+        } catch (e) {
+          console.error('Failed to update JWT config:', e);
+        }
       }
       // Re-render to update all attributes
       this.render();

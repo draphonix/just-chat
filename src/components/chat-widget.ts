@@ -1,11 +1,13 @@
 import { BaseComponent } from './base-component';
 import './chat-launcher';
 import './chat-window';
+import type { JWTConfig } from '../services/jwt';
 
 export class ChatWidget extends BaseComponent {
   static get observedAttributes() {
     return [
       'webhook-url',
+      'jwt-config',
       'theme-color',
       'position',
       'title',
@@ -50,6 +52,9 @@ export class ChatWidget extends BaseComponent {
     // Create chat window
     const window = document.createElement('chat-window');
     window.setAttribute('webhook-url', config.webhookUrl);
+    if (config.jwtConfig) {
+      window.setAttribute('jwt-config', JSON.stringify(config.jwtConfig));
+    }
     window.setAttribute('theme-color', config.themeColor);
     window.setAttribute('title', config.title);
     window.setAttribute('welcome-message', config.welcomeMessage);
@@ -78,8 +83,19 @@ export class ChatWidget extends BaseComponent {
   }
 
   private getConfig() {
+    let jwtConfig: JWTConfig | undefined;
+    const jwtConfigAttr = this.getAttribute('jwt-config');
+    if (jwtConfigAttr) {
+      try {
+        jwtConfig = JSON.parse(jwtConfigAttr);
+      } catch (e) {
+        console.error('Failed to parse JWT config:', e);
+      }
+    }
+
     return {
       webhookUrl: this.getAttribute('webhook-url') || '',
+      jwtConfig,
       themeColor: this.getAttribute('theme-color') || '#1E40AF',
       position: this.getAttribute('position') || 'bottom-right',
       title: this.getAttribute('title') || 'Chat with us',

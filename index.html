@@ -39,13 +39,22 @@
     }
     
     .demo-controls input[type="text"],
-    .demo-controls input[type="color"] {
+    .demo-controls input[type="color"],
+    .demo-controls input[type="number"] {
       width: 100%;
       padding: 0.75em;
       margin-top: 0.5em;
       border: 1px solid #d1d5db;
       border-radius: 6px;
       font-size: 14px;
+    }
+
+    .section-title {
+      margin: 2em 0 1em;
+      padding-bottom: 0.5em;
+      border-bottom: 1px solid #e5e7eb;
+      color: #1e293b;
+      font-size: 1.1em;
     }
 
     .demo-content {
@@ -93,6 +102,7 @@
     <h1>Universal Chat Popup Demo</h1>
     
     <div class="demo-controls">
+      <div class="section-title">Basic Configuration</div>
       <label>
         Webhook URL:
         <input type="text" id="webhookUrl" value="http://localhost:3000/chat">
@@ -112,6 +122,27 @@
         Welcome Message:
         <input type="text" id="welcomeMessage" value="👋 Hi there! How can we help you today?">
       </label>
+
+      <div class="section-title">JWT Authentication</div>
+      <label>
+        JWT Issuer:
+        <input type="text" id="jwtIssuer" value="demo-app">
+      </label>
+
+      <label>
+        JWT Token Endpoint:
+        <input type="text" id="jwtTokenEndpoint" value="http://localhost:3000/token">
+      </label>
+
+      <label>
+        JWT Refresh Interval (seconds):
+        <input type="number" id="jwtRefreshInterval" value="300" min="60">
+      </label>
+
+      <label>
+        JWT Expiration Window (seconds):
+        <input type="number" id="jwtExpirationWindow" value="60" min="30">
+      </label>
     </div>
 
     <div class="demo-content">
@@ -125,6 +156,8 @@
         <li>Messages show status indicators (sending, sent, error)</li>
         <li>You can cancel a message while it's being sent</li>
         <li>Try changing the theme color and other settings above</li>
+        <li>JWT tokens are automatically refreshed and included in requests</li>
+        <li>Authentication errors are handled gracefully with automatic retry</li>
       </ul>
     </div>
 
@@ -146,6 +179,12 @@
       history: {
         enabled: true,
         clearButton: true
+      },
+      jwtConfig: {
+        issuer: document.getElementById('jwtIssuer').value,
+        tokenEndpoint: document.getElementById('jwtTokenEndpoint').value,
+        refreshInterval: parseInt(document.getElementById('jwtRefreshInterval').value),
+        expirationWindow: parseInt(document.getElementById('jwtExpirationWindow').value)
       }
     });
     
@@ -165,6 +204,12 @@
           history: {
             enabled: true,
             clearButton: true
+          },
+          jwtConfig: {
+            issuer: document.getElementById('jwtIssuer').value,
+            tokenEndpoint: document.getElementById('jwtTokenEndpoint').value,
+            refreshInterval: parseInt(document.getElementById('jwtRefreshInterval').value),
+            expirationWindow: parseInt(document.getElementById('jwtExpirationWindow').value)
           }
         });
       });

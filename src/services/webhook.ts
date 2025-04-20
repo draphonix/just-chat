@@ -1,4 +1,5 @@
 import type { ChatMessage } from './storage';
+import { JWTService } from './jwt';
 
 export interface WebhookRequest {
   message: string;
@@ -18,7 +19,7 @@ export class WebhookService {
   private readonly url: string;
   private controller: AbortController | null = null;
 
-  constructor(webhookUrl: string) {
+  constructor(webhookUrl: string, private jwtService?: JWTService) {
     this.url = webhookUrl;
   }
 
@@ -31,16 +32,27 @@ export class WebhookService {
     this.controller = new AbortController();
 
     try {
+      // Get JWT token if service is configured
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (this.jwtService) {
+        const token = await this.jwtService.getToken();
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(this.url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(request),
         signal: this.controller.signal
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Authentication failed');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 

@@ -1,8 +1,10 @@
 import './components/chat-widget';
+import type { JWTConfig } from './services/jwt';
 
 // Export for NPM package
 export function initChatPopup(config: {
   webhookUrl: string;
+  jwtConfig?: JWTConfig;
   themeColor?: string;
   position?: 'bottom-right' | 'bottom-left';
   title?: string;
@@ -15,6 +17,9 @@ export function initChatPopup(config: {
   const widget = document.createElement('chat-widget');
   
   widget.setAttribute('webhook-url', config.webhookUrl);
+  if (config.jwtConfig) {
+    widget.setAttribute('jwt-config', JSON.stringify(config.jwtConfig));
+  }
   if (config.themeColor) widget.setAttribute('theme-color', config.themeColor);
   if (config.position) widget.setAttribute('position', config.position);
   if (config.title) widget.setAttribute('title', config.title);
@@ -29,8 +34,21 @@ export function initChatPopup(config: {
 // Auto-initialize if script is loaded via CDN
 if (document.currentScript instanceof HTMLScriptElement) {
   const script = document.currentScript;
+  
+  // Parse JWT config from data attributes
+  let jwtConfig: JWTConfig | undefined;
+  if (script.dataset.jwtIssuer && script.dataset.jwtTokenEndpoint) {
+    jwtConfig = {
+      issuer: script.dataset.jwtIssuer,
+      tokenEndpoint: script.dataset.jwtTokenEndpoint,
+      refreshInterval: script.dataset.jwtRefreshInterval ? parseInt(script.dataset.jwtRefreshInterval) : undefined,
+      expirationWindow: script.dataset.jwtExpirationWindow ? parseInt(script.dataset.jwtExpirationWindow) : undefined
+    };
+  }
+
   initChatPopup({
     webhookUrl: script.dataset.webhookUrl || '',
+    jwtConfig,
     themeColor: script.dataset.themeColor,
     position: script.dataset.position as 'bottom-right' | 'bottom-left',
     title: script.dataset.title,
